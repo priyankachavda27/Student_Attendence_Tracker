@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Faculty Attendance Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
+  <style>
+    /* DESIGN TOKENS */
+    :root {
+      --primary: #7c3aed;
+      --primary-light: #9b6dff;
+      --secondary: #0d9488;
+      --accent: #f59e0b;
+      --bg: #f8fafc;
+      --bg2: #e2e8f0;
+      --card: #ffffff;
+      --card-border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --present: #10b981;
+      --absent: #ef4444;
+      --radius: 16px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.08);
+      --font: system-ui, -apple-system, sans-serif;
+      --transition: 0.3s ease;
+    }
+
+    /* FEATURE 1: CSS-ONLY DARK/LIGHT MODE TOGGLE
+       Uses hidden checkbox + sibling selectors */
+    #theme-toggle { display: none; }
+
+    /* Light mode is default (:root above). Dark mode via :checked ~ * */
+    #theme-toggle:checked ~ .app-wrapper {
+      --bg: #0f172a;
+      --bg2: #1e293b;
+      --card: #1e293b;
+      --card-border: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+
+    /* Day mode: soft light background */
+    .app-wrapper {
+      background: linear-gradient(135deg, #e0e7ff 0%, #f0fdf4 50%, #fdf4ff 100%);
+      background-attachment: fixed;
+    }
+    /* Night mode: deep dark background */
+    #theme-toggle:checked ~ .app-wrapper {
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+      background-attachment: fixed;
+    }
+
+    /* Day/Night toggle — inline in navbar, not fixed */
+    .theme-label {
+      cursor: pointer;
+      background: rgba(255,255,255,0.15);
+      border: 1.5px solid rgba(255,255,255,0.3);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.8rem;
+      transition: background var(--transition), box-shadow var(--transition);
+      user-select: none;
+      white-space: nowrap;
+    }
+    .theme-label:hover { background: rgba(255,255,255,0.25); }
+    .theme-label .sun  { display: inline; }
+    .theme-label .moon { display: none; }
+    #theme-toggle:checked ~ .app-wrapper .theme-label .sun  { display: none; }
+    #theme-toggle:checked ~ .app-wrapper .theme-label .moon { display: inline; }
+
+    /* FEATURE 2: ANIMATED GRADIENT BACKGROUND */
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .app-wrapper {
+      min-height: 100vh;
+      color: var(--text);
+      font-family: var(--font);
+      transition: background 0.5s ease, color var(--transition);
+      padding-bottom: 60px;
+    }
+
+    /* FEATURE 10: SHIMMER/SKELETON LOADER */
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position:  200% 0; }
+    }
+    @keyframes fadeInCard {
+      0%   { opacity: 0; }
+      80%  { opacity: 0; }
+      100% { opacity: 1; }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+      transition: box-shadow var(--transition), transform var(--transition), background var(--transition), border-color var(--transition);
+      animation: fadeInCard 1.5s ease forwards;
+    }
+    /* Shimmer pseudo-element overlay */
+    .card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,255,255,0.45) 40%,
+        rgba(255,255,255,0.75) 50%,
+        rgba(255,255,255,0.45) 60%,
+        transparent 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s linear 0s 1 forwards;
+      opacity: 0;
+      animation: shimmer 1.2s ease 0s 1 forwards, fadeShimmerOut 0.1s ease 1.5s forwards;
+      pointer-events: none;
+      z-index: 2;
+    }
+    @keyframes fadeShimmerOut { to { opacity: 0; display: none; } }
+
+    /* FEATURE 3: GLOWING NEON CARD BORDERS */
+    .card:hover {
+      box-shadow: 0 0 15px #7c3aed, 0 0 35px rgba(124,58,237,0.4), 0 8px 32px rgba(0,0,0,0.15);
+      transform: translateY(-4px);
+    }
+
+    /* FEATURE 8: CSS RIBBON BADGE */
+    .card.ribbon-live::before,
+    .card.ribbon-week::before,
+    .card.ribbon-top::before {
+      content: attr(data-ribbon);
+      position: absolute;
+      top: 14px;
+      right: -8px;
+      background: var(--primary);
+      color: #fff;
+      padding: 4px 18px 4px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 8% 50%);
+      z-index: 3;
+      border-radius: 0 2px 2px 0;
+    }
+    .card.ribbon-week::before { background: var(--secondary); }
+    .card.ribbon-top::before  { background: var(--accent); color: #1e293b; }
+
+    /* GLOBAL RESETS & BASE */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    button { cursor: pointer; font-family: var(--font); }
+    input, select { font-family: var(--font); }
+    a { text-decoration: none; }
+
+    /* HEADER */
+    header {
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 500;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+      gap: 12px;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .header-icon {
+      width: 40px; height: 40px; min-width: 40px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 700; color: #fff; letter-spacing: -0.3px; white-space: nowrap; }
+    header p  { font-size: 0.7rem; color: rgba(255,255,255,0.6); margin-top: 1px; }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .btn-reset {
+      background: rgba(239,68,68,0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: var(--radius-sm);
+      padding: 7px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: background var(--transition), box-shadow var(--transition);
+    }
+    .btn-reset:hover { background: rgba(239,68,68,0.3); box-shadow: 0 0 12px rgba(239,68,68,0.4); }
+    .btn-add {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 7px 14px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: box-shadow var(--transition), transform var(--transition);
+      display: inline-block;
+    }
+    .btn-add:hover { box-shadow: 0 0 15px rgba(124,58,237,0.6); transform: translateY(-1px); }
+    @media (max-width: 600px) {
+      header h1 { font-size: 0.95rem; }
+      header p  { display: none; }
+      .btn-reset span { display: none; }
+    }
+
+    /* MAIN LAYOUT */
+    main { max-width: 1200px; margin: 0 auto; padding: 28px 20px; }
+
+    /* FEATURE 5: CSS-ONLY TAB SWITCHING */
+    .tab-inputs { display: none; }
+
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      background: rgba(15,23,42,0.6);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 6px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .tab-label {
+      flex: 1;
+      text-align: center;
+      padding: 10px 20px;
+      border-radius: 8px;
+      color: rgba(255,255,255,0.65);
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition), box-shadow var(--transition);
+      user-select: none;
+      position: relative;
+    }
+    .tab-label:hover { color: #fff; background: rgba(255,255,255,0.08); }
+
+    /* Active tab styles via :checked sibling — inputs are inside .tab-container */
+    #tab-attendance:checked ~ .tab-bar label[for="tab-attendance"],
+    #tab-statistics:checked ~ .tab-bar label[for="tab-statistics"],
+    #tab-students:checked ~ .tab-bar label[for="tab-students"] {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(124,58,237,0.5);
+    }
+    #tab-attendance:checked ~ .tab-bar label[for="tab-attendance"]::after,
+    #tab-statistics:checked ~ .tab-bar label[for="tab-statistics"]::after,
+    #tab-students:checked ~ .tab-bar label[for="tab-students"]::after {
+      content: '';
+      position: absolute;
+      bottom: -4px; left: 50%;
+      transform: translateX(-50%);
+      width: 6px; height: 6px;
+      background: var(--secondary);
+      border-radius: 50%;
+    }
+
+    /* Tab content panels — hidden by default */
+    .tab-panel { display: none; }
+    #tab-attendance:checked ~ .tab-panels #panel-attendance,
+    #tab-statistics:checked ~ .tab-panels #panel-statistics,
+    #tab-students:checked ~ .tab-panels #panel-students { display: block; }
+
+    /* tab-container wraps radios + tab-bar + tab-panels so ~ works */
+    .tab-container { display: contents; }
+
+    /* CONTROLS CARD */
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: flex-end;
+      margin-bottom: 20px;
+    }
+    .control-group { display: flex; flex-direction: column; gap: 5px; }
+    .control-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .control-group select,
+    .control-group input[type="date"] {
+      background: var(--bg2);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 9px 14px;
+      font-size: 0.88rem;
+      transition: border-color var(--transition), box-shadow var(--transition);
+      outline: none;
+    }
+    .control-group select:focus,
+    .control-group input[type="date"]:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.2);
+    }
+
+    /* STATS STRIP */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 14px 18px;
+      text-align: center;
+      transition: box-shadow var(--transition), transform var(--transition), background var(--transition);
+    }
+    .stat-box:hover { box-shadow: 0 0 15px rgba(124,58,237,0.35); transform: translateY(-3px); }
+    .stat-box .stat-val { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+    .stat-box .stat-lbl { font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; font-weight: 600; }
+    .stat-box.total  .stat-val { color: var(--primary); }
+    .stat-box.present .stat-val { color: var(--present); }
+    .stat-box.absent  .stat-val { color: var(--absent); }
+    .stat-box.pct     .stat-val { color: var(--accent); }
+
+    /* SUBMIT BUTTON */
+    .btn-submit {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 11px 28px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      transition: box-shadow var(--transition), transform var(--transition);
+      margin-top: 10px;
+    }
+    .btn-submit:hover { box-shadow: 0 0 20px rgba(124,58,237,0.6), 0 0 40px rgba(13,148,136,0.3); transform: translateY(-2px); }
+
+    /* SEARCH BAR */
+    .search-wrap {
+      position: relative;
+      margin-bottom: 14px;
+    }
+    .search-wrap input {
+      width: 100%;
+      padding: 10px 16px 10px 40px;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--card-border);
+      background: var(--bg2);
+      color: var(--text);
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+    }
+    .search-wrap input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
+    }
+    .search-wrap::before {
+      content: '';
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 15px;
+      pointer-events: none;
+    }
+
+    /* SIMPLE STUDENT ROWS (Attendance Tab) */
+    .students-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .student-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      transition: box-shadow var(--transition), border-color var(--transition), background var(--transition);
+    }
+    .student-row:hover {
+      border-color: var(--primary);
+      box-shadow: 0 0 10px rgba(124,58,237,0.15);
+    }
+
+    /* Avatar circle */
+    .avatar {
+      width: 36px; height: 36px; min-width: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .student-meta { flex: 1; min-width: 0; }
+    .student-name {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--text);
+      display: inline-block;
+      position: relative;
+      transition: color var(--transition);
+    }
+
+    /* FEATURE 6: CSS-ONLY TOOLTIPS */
+    .student-name[data-tooltip] { cursor: default; }
+    .student-name[data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      color: #f1f5f9;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      white-space: nowrap;
+      font-weight: 500;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .student-name[data-tooltip]::before {
+      content: '';
+      position: absolute;
+      bottom: calc(100% + 2px);
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: #1e293b;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 999;
+    }
+    .student-name[data-tooltip]:hover::after,
+    .student-name[data-tooltip]:hover::before { opacity: 1; }
+
+    .student-info-line {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* FEATURE 7: ANIMATED PROGRESS BARS */
+    @keyframes fillBar {
+      from { width: 0%; }
+      to   { width: var(--pct); }
+    }
+
+    .pbar-wrap {
+      flex: 1;
+      max-width: 120px;
+      background: rgba(0,0,0,0.08);
+      border-radius: 999px;
+      height: 7px;
+      overflow: hidden;
+      position: relative;
+    }
+    #theme-toggle:checked ~ .app-wrapper .pbar-wrap {
+      background: rgba(255,255,255,0.1);
+    }
+    .pbar-fill {
+      height: 100%;
+      border-radius: 999px;
+      animation: fillBar 1.2s ease-out forwards;
+      width: 0%;
+    }
+    .pbar-fill.green  { background: linear-gradient(90deg, #10b981, #34d399); }
+    .pbar-fill.orange { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .pbar-fill.red    { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+    .pbar-pct {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      min-width: 32px;
+      text-align: right;
+    }
+
+    /* Present / Absent toggle buttons */
+    .att-radio-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .radio-btn-p, .radio-btn-a {
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1.5px solid;
+      transition: background var(--transition), color var(--transition), box-shadow var(--transition);
+    }
+    .radio-btn-p { border-color: var(--present); color: var(--present); background: transparent; }
+    .radio-btn-a { border-color: var(--absent);  color: var(--absent);  background: transparent; }
+    input[type="radio"].r-p:checked + label.radio-btn-p { background: var(--present); color: #fff; box-shadow: 0 0 8px rgba(16,185,129,0.4); }
+    input[type="radio"].r-a:checked + label.radio-btn-a { background: var(--absent);  color: #fff; box-shadow: 0 0 8px rgba(239,68,68,0.4); }
+    input[type="radio"].r-p, input[type="radio"].r-a { display: none; }
+
+    /* Remove button */
+    .btn-remove {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 5px 9px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition), border-color var(--transition);
+      flex-shrink: 0;
+    }
+    .btn-remove:hover { background: rgba(239,68,68,0.1); color: #ef4444; border-color: rgba(239,68,68,0.3); }
+
+    /* FEATURE 9: ZEBRA GRADIENT TABLE ROWS */
+    .att-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .att-table th {
+      background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(13,148,136,0.15));
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.5px;
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 700;
+    }
+    .att-table td {
+      padding: 9px 12px;
+      color: var(--text);
+      border-bottom: 1px solid var(--card-border);
+      transition: background var(--transition);
+    }
+    .att-table tr:nth-child(even) td {
+      background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(13,148,136,0.08));
+    }
+    .att-table tr:nth-child(odd) td {
+      background: transparent;
+    }
+    .att-table tbody tr:hover td {
+      background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(13,148,136,0.15));
+    }
+    .badge-p { background: rgba(16,185,129,0.15); color: #10b981; border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 0.72rem; }
+    .badge-a { background: rgba(239,68,68,0.15);  color: #ef4444;  border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 0.72rem; }
+    .badge-na{ background: rgba(100,116,139,0.15); color: #64748b; border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 0.72rem; }
+
+    /* ABSENT SUMMARY */
+    .absent-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip {
+      background: rgba(239,68,68,0.12);
+      color: #ef4444;
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 999px;
+      padding: 4px 14px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .chip-none { color: var(--text-muted); font-size: 0.82rem; }
+
+    /* STATISTICS TAB — refreshed dashboard layout */
+    .stats-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .stats-grid > .card { padding: 24px; }
+    .stats-grid .section-title { margin-bottom: 18px; font-size: 1.05rem; }
+    .weekly-chart { margin-top: 4px; display: flex; flex-direction: column; gap: 14px; }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) 48px;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 0;
+      font-size: 0.85rem;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(124,58,237,0.035);
+    }
+    .bar-day { color: var(--text-muted); font-weight: 700; }
+    .bar-track {
+      background: rgba(100,116,139,0.16);
+      border-radius: 999px;
+      height: 12px;
+      overflow: hidden;
+    }
+    #theme-toggle:checked ~ .app-wrapper .bar-track { background: rgba(255,255,255,0.1); }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      border-radius: 999px;
+      animation: fillBar 1.5s ease-out forwards;
+      width: 0%;
+    }
+    .bar-pct { text-align: right; font-weight: 800; color: var(--text); }
+    #panel-statistics .att-table { min-width: 760px; }
+    #panel-statistics .att-table th { position: sticky; top: 0; z-index: 1; }
+    #panel-statistics .att-table tbody tr { transition: background var(--transition); }
+    #panel-statistics .att-table tbody tr:hover { background: rgba(124,58,237,0.06); }
+    #panel-statistics .card { overflow: hidden; }
+    @media (max-width: 700px) {
+      .stats-grid > .card { padding: 18px; }
+      .bar-row { grid-template-columns: 40px minmax(0, 1fr) 42px; gap: 8px; }
+    }
+
+    /* STUDENTS TAB (All Students View) */
+    .all-students-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .student-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: box-shadow var(--transition), transform var(--transition), background var(--transition);
+    }
+    .student-card:hover {
+      box-shadow: 0 0 15px rgba(124,58,237,0.3);
+      transform: translateY(-3px);
+    }
+    .student-card .meta { flex: 1; }
+    .student-card .name { font-weight: 700; font-size: 0.88rem; color: var(--text); }
+    .student-card .info { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+    .div-badge {
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 800;
+      color: #fff;
+    }
+    .div-A { background: var(--primary); }
+    .div-B { background: var(--secondary); }
+    .div-C { background: var(--accent); color: #1e293b !important; }
+    .div-D { background: #ec4899; }
+
+    /* TOAST NOTIFICATIONS */
+    @keyframes toastIn  { from { transform: translateY(80px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(20px); } }
+
+    #toast-container {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      background: #1e293b;
+      color: #f1f5f9;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      border-left: 4px solid var(--primary);
+      animation: toastIn 0.3s ease forwards;
+      white-space: nowrap;
+    }
+    .toast.out { animation: toastOut 0.4s ease forwards; }
+    .toast.success { border-left-color: var(--present); }
+    .toast.error   { border-left-color: var(--absent); }
+    .toast.warn    { border-left-color: var(--accent); }
+
+    /* CSS-ONLY :TARGET MODAL (Add Student) */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .modal-overlay:target {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 32px;
+      width: 100%;
+      max-width: 440px;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      transform: translateY(30px);
+      transition: transform 0.35s ease, background var(--transition);
+    }
+    .modal-overlay:target .modal-box { transform: translateY(0); }
+    .modal-box h2 { font-size: 1.1rem; font-weight: 800; color: var(--text); margin-bottom: 20px; }
+    .modal-close {
+      position: absolute;
+      top: 16px; right: 18px;
+      font-size: 1.3rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      line-height: 1;
+      transition: color var(--transition);
+    }
+    .modal-close:hover { color: var(--absent); }
+    .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .form-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+    .form-group input,
+    .form-group select {
+      background: var(--bg2);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.2);
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 6px; }
+    .btn-cancel {
+      background: var(--bg2);
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 9px 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-block;
+      transition: background var(--transition);
+    }
+    .btn-cancel:hover { background: var(--card-border); }
+    .btn-save {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 9px 24px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      transition: box-shadow var(--transition), transform var(--transition);
+    }
+    .btn-save:hover { box-shadow: 0 0 15px rgba(124,58,237,0.5); transform: translateY(-1px); }
+
+    /* RESPONSIVE */
+    @media (max-width: 600px) {
+      .stats-strip { grid-template-columns: repeat(2,1fr); }
+      .controls-row { flex-direction: column; }
+      header { padding: 12px 16px; }
+      main   { padding: 16px 12px; }
+    }
+
+    /* UTILITY */
+    .section-title {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title span { color: var(--text-muted); font-weight: 500; font-size: 0.8rem; }
+    .gap-20 { gap: 20px; }
+    .mb-20  { margin-bottom: 20px; }
+    .mt-10  { margin-top: 10px; }
+    .text-muted { color: var(--text-muted); font-size: 0.82rem; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .w-full { width: 100%; }
+    hr.divider { border: none; border-top: 1px solid var(--card-border); margin: 14px 0; }
+  </style>
+</head>
+<body>
+
+<!-- FEATURE 1: Hidden theme checkbox — MUST be first child of body  -->
+<input type="checkbox" id="theme-toggle" class="tab-inputs" />
+
+<!-- ENTIRE APP WRAPPED SO :checked ~ .app-wrapper WORKS  -->
+<div class="app-wrapper">
+
+  <!-- HEADER  -->
+  <header>
+    <div class="header-left">
+      <div class="header-icon"></div>
+      <div>
+        <h1>Attendance Tracker</h1>
+        <p>Faculty Management System</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn-reset" id="btn-reset"><span>Reset All</span></button>
+      <a href="#add-modal" class="btn-add">Add Student</a>
+      <label for="theme-toggle" class="theme-label" title="Toggle day/night mode">
+        <span class="sun">Day</span>
+        <span class="moon">Night</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- MAIN  -->
+  <main>
+
+    <!-- Tab radio inputs MUST be siblings of .tab-bar and .tab-panels for CSS ~ to work -->
+    <input type="radio" name="tab" id="tab-attendance" class="tab-inputs" checked />
+    <input type="radio" name="tab" id="tab-statistics"  class="tab-inputs" />
+
+    <!-- TAB BAR  -->
+    <div class="tab-bar">
+      <label for="tab-attendance" class="tab-label">Attendance</label>
+      <label for="tab-statistics"  class="tab-label">Statistics</label>
+    </div>
+
+    <!-- ALL TAB PANELS  -->
+    <div class="tab-panels">
+
+      <!-- TAB 1: ATTENDANCE  -->
+      <div class="tab-panel" id="panel-attendance">
+
+        <!-- Controls -->
+        <div class="card mb-20">
+          <div class="controls-row">
+            <div class="control-group">
+              <label>Division</label>
+              <select id="filter-div">
+                <option value="A">Division A</option>
+                <option value="B">Division B</option>
+                <option value="C">Division C</option>
+                <option value="D">Division D</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>Batch</label>
+              <select id="filter-batch">
+                <option value="1">Batch 1</option>
+                <option value="2">Batch 2</option>
+                <option value="3">Batch 3</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>Date</label>
+              <input type="date" id="att-date" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats strip -->
+        <div class="stats-strip mb-20">
+          <div class="stat-box total">
+            <div class="stat-val" id="stat-total">0</div>
+            <div class="stat-lbl">Total</div>
+          </div>
+          <div class="stat-box present">
+            <div class="stat-val" id="stat-present">0</div>
+            <div class="stat-lbl">Present</div>
+          </div>
+          <div class="stat-box absent">
+            <div class="stat-val" id="stat-absent">0</div>
+            <div class="stat-lbl">Absent</div>
+          </div>
+          <div class="stat-box pct">
+            <div class="stat-val" id="stat-pct">—</div>
+            <div class="stat-lbl">Rate</div>
+          </div>
+        </div>
+
+        <!-- Student rows -->
+        <div class="card mb-20">
+          <div class="section-title">Students <span id="student-count-label"></span></div>
+          <!-- Search bar -->
+          <div class="search-wrap">
+            <input type="text" id="student-search" placeholder="Search student by name or roll number…" oninput="filterSearch()" />
+          </div>
+          <div class="students-list" id="students-list"></div>
+          <div style="margin-top:16px;">
+            <button class="btn-submit" id="btn-submit">Submit Attendance</button>
+          </div>
+        </div>
+
+        <!-- Absent summary -->
+        <div class="card ribbon-week" data-ribbon="TODAY">
+          <div class="section-title">Absent Summary <span id="absent-count-label"></span></div>
+          <div class="absent-chips" id="absent-chips"></div>
+        </div>
+
+      </div><!-- /panel-attendance -->
+
+      <!-- TAB 2: STATISTICS  -->
+      <div class="tab-panel" id="panel-statistics">
+        <div class="section-title" style="margin-bottom:18px;">Attendance Overview <span>Weekly trends and students who need attention</span></div>
+        <div class="stats-grid">
+
+          <!-- Weekly Chart -->
+          <div class="card ribbon-week" data-ribbon="WEEK">
+            <div class="section-title">Weekly Attendance <span>Last 7 days</span></div>
+            <div class="weekly-chart" id="weekly-chart"></div>
+          </div>
+
+          <!-- Low Attendance Table -->
+          <div class="card" style="grid-column: 1 / -1;">
+            <div class="section-title">Low Attendance Students <span style="color:var(--absent);font-size:0.78rem;font-weight:500;">(below 75%)</span></div>
+            <div style="overflow-x:auto;">
+              <table class="att-table" id="stats-table">
+                <thead>
+                  <tr>
+                    <th>Roll</th>
+                    <th>Name</th>
+                    <th>Div</th>
+                    <th>Batch</th>
+                    <th>Present</th>
+                    <th>Absent</th>
+                    <th>Rate</th>
+                    <th>Progress</th>
+                  </tr>
+                </thead>
+                <tbody id="stats-tbody"></tbody>
+              </table>
+              <div id="no-low-att" style="display:none;text-align:center;padding:24px;color:var(--present);font-weight:600;">
+                 All students have attendance above 75%!
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /panel-statistics -->
+
+    </div><!-- /tab-panels -->
+  </main>
+
+  <!-- CSS-ONLY :TARGET MODAL — Add Student
+   -->
+  <div class="modal-overlay" id="add-modal">
+    <div class="modal-box">
+      <a href="#" class="modal-close" title="Close">✕</a>
+      <h2> Add New Student</h2>
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="new-name" placeholder="e.g. Ravi Shankar" />
+      </div>
+      <div class="form-group">
+        <label>Roll Number</label>
+        <input type="number" id="new-roll" placeholder="e.g. 121" />
+      </div>
+      <div class="form-group">
+        <label>Division</label>
+        <select id="new-div">
+          <option value="A">Division A</option>
+          <option value="B">Division B</option>
+          <option value="C">Division C</option>
+          <option value="D">Division D</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Batch</label>
+        <select id="new-batch">
+          <option value="1">Batch 1</option>
+          <option value="2">Batch 2</option>
+          <option value="3">Batch 3</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <a href="#" class="btn-cancel">Cancel</a>
+        <button class="btn-save" id="btn-save-student">Save Student</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+</div><!-- /app-wrapper -->
+
+<!-- JAVASCRIPT — Logic & localStorage only
+ -->
+<script>
+/* DATA & HELPERS */
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat'];
+const AVATAR_COLORS = [
+  '#7c3aed','#0d9488','#f59e0b','#ec4899','#3730a3',
+  '#10b981','#ef4444','#06b6d4','#8b5cf6','#f97316'
+];
+
+const DEFAULT_STUDENTS = [
+  {id:'s101',name:'Aarav Shah',  roll:101,div:'A',batch:1},
+  {id:'s102',name:'Priya Patel', roll:102,div:'A',batch:1},
+  {id:'s103',name:'Rohan Mehta', roll:103,div:'A',batch:1},
+  {id:'s104',name:'Sneha Joshi', roll:104,div:'A',batch:1},
+  {id:'s105',name:'Yash Kumar',  roll:105,div:'A',batch:1},
+  {id:'s106',name:'Ananya Singh',roll:106,div:'A',batch:2},
+  {id:'s107',name:'Karan Verma', roll:107,div:'A',batch:2},
+  {id:'s108',name:'Meera Nair',  roll:108,div:'A',batch:2},
+  {id:'s109',name:'Dev Sharma',  roll:109,div:'A',batch:2},
+  {id:'s110',name:'Riya Gupta',  roll:110,div:'A',batch:2},
+  {id:'s111',name:'Arjun Reddy', roll:111,div:'B',batch:1},
+  {id:'s112',name:'Kavya Iyer',  roll:112,div:'B',batch:1},
+  {id:'s113',name:'Nikhil Das',  roll:113,div:'B',batch:1},
+  {id:'s114',name:'Pooja Desai', roll:114,div:'B',batch:1},
+  {id:'s115',name:'Siddharth Rao',roll:115,div:'B',batch:1},
+  {id:'s116',name:'Tanvi Bhatt', roll:116,div:'B',batch:2},
+  {id:'s117',name:'Vikram Jain', roll:117,div:'B',batch:2},
+  {id:'s118',name:'Zara Khan',   roll:118,div:'B',batch:2},
+  {id:'s119',name:'Aditya Nair', roll:119,div:'B',batch:2},
+  {id:'s120',name:'Bhavna Shah', roll:120,div:'B',batch:2},
+];
+
+function loadStudents() {
+  const raw = localStorage.getItem('att_students');
+  return raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(DEFAULT_STUDENTS));
+}
+function saveStudents(students) {
+  localStorage.setItem('att_students', JSON.stringify(students));
+}
+function loadRecords() {
+  const raw = localStorage.getItem('att_records');
+  return raw ? JSON.parse(raw) : {};
+}
+function saveRecords(records) {
+  localStorage.setItem('att_records', JSON.stringify(records));
+}
+
+function getInitials(name) {
+  return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+}
+function avatarColor(id) {
+  let hash = 0;
+  for (let c of id) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+function todayStr() {
+  return new Date().toISOString().slice(0,10);
+}
+function pctClass(p) {
+  if (p >= 75) return 'green';
+  if (p >= 50) return 'orange';
+  return 'red';
+}
+
+/* TOAST */
+function showToast(msg, type='') {
+  const tc = document.getElementById('toast-container');
+  const t  = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.textContent = msg;
+  tc.appendChild(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(()=>t.remove(), 400); }, 2800);
+}
+
+/* RENDER ATTENDANCE TAB */
+let students = loadStudents();
+let records  = loadRecords();
+
+function getFiltered() {
+  const div   = document.getElementById('filter-div').value;
+  const batch = parseInt(document.getElementById('filter-batch').value);
+  return students.filter(s => s.div === div && s.batch === batch);
+}
+
+function getDateRecords(dateStr) {
+  return records[dateStr] || {};
+}
+
+function renderStudentList() {
+  const list   = document.getElementById('students-list');
+  const dateStr= document.getElementById('att-date').value || todayStr();
+  const filtered = getFiltered();
+  const dateRec  = getDateRecords(dateStr);
+
+  document.getElementById('student-count-label').textContent =
+    `(${filtered.length} students)`;
+
+  if (!filtered.length) {
+    list.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px;">No students in this Division/Batch.</p>';
+    updateStats([], {});
+    renderAbsentChips([]);
+    return;
+  }
+
+  list.innerHTML = '';
+  filtered.forEach((s) => {
+    const initials  = getInitials(s.name);
+    const bgColor   = avatarColor(s.id);
+    const curStatus = dateRec[s.id] || '';
+
+    // Calculate attendance % from records
+    let totalDays=0, presentDays=0;
+    Object.values(records).forEach(dayRec => {
+      if (s.id in dayRec) { totalDays++; if (dayRec[s.id]==='P') presentDays++; }
+    });
+    const pct = totalDays > 0 ? Math.round(presentDays/totalDays*100) : 0;
+    const pClass = pctClass(pct);
+
+    // Simple flat row — no <details>, no expand
+    const row = document.createElement('div');
+    row.className = 'student-row';
+    row.dataset.name = s.name.toLowerCase();
+    row.dataset.roll = s.roll;
+    row.innerHTML = `
+      <div class="avatar" style="background:${bgColor};">${initials}</div>
+      <div class="student-meta">
+        <span class="student-name"
+          data-tooltip="Roll: ${s.roll} | Div: ${s.div} | Batch: ${s.batch}"
+        >${s.name}</span>
+        <div class="student-info-line">Roll ${s.roll} &bull; Div ${s.div} &bull; Batch ${s.batch}</div>
+      </div>
+      <div class="pbar-wrap" title="${pct}% attendance">
+        <div class="pbar-fill ${pClass}" style="--pct:${pct}%;"></div>
+      </div>
+      <div class="pbar-pct">${totalDays>0?pct+'%':'—'}</div>
+      <div class="att-radio-row">
+        <input type="radio" class="r-p" name="att-${s.id}" id="rp-${s.id}" value="P" ${curStatus==='P'?'checked':''}>
+        <label class="radio-btn-p" for="rp-${s.id}">Present</label>
+        <input type="radio" class="r-a" name="att-${s.id}" id="ra-${s.id}" value="A" ${curStatus==='A'?'checked':''}>
+        <label class="radio-btn-a" for="ra-${s.id}">Absent</label>
+      </div>
+      <button class="btn-remove" data-id="${s.id}" title="Remove student">🗑</button>
+    `;
+    list.appendChild(row);
+  });
+
+  // Remove button handlers
+  list.querySelectorAll('.btn-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      if (!confirm('Remove this student from all records?')) return;
+      students = students.filter(s => s.id !== id);
+      Object.keys(records).forEach(d => { delete records[d][id]; });
+      saveStudents(students);
+      saveRecords(records);
+      showToast('Student removed.', 'warn');
+      renderStudentList();
+      renderStatsTab();
+    });
+  });
+
+  //  LIVE update: re-calculate stats on every Present/Absent click
+  list.querySelectorAll('input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      updateStats(filtered, dateRec);
+      renderAbsentChips(filtered, dateRec);
+    });
+  });
+
+  updateStats(filtered, dateRec);
+  renderAbsentChips(filtered, dateRec);
+}
+
+/* Search filter — hides rows that don't match */
+function filterSearch() {
+  const q = (document.getElementById('student-search').value || '').toLowerCase().trim();
+  document.querySelectorAll('#students-list .student-row').forEach(row => {
+    const match = row.dataset.name.includes(q) || row.dataset.roll.includes(q);
+    row.style.display = match ? '' : 'none';
+  });
+}
+
+function updateStats(filtered, dateRec) {
+  const total = filtered.length;
+  let present = 0, absent = 0;
+
+  filtered.forEach(s => {
+    // Read live from DOM first (radio buttons), fall back to saved record
+    const rp = document.getElementById('rp-' + s.id);
+    const ra = document.getElementById('ra-' + s.id);
+    if      (rp && rp.checked) present++;
+    else if (ra && ra.checked) absent++;
+    else if (!rp && dateRec[s.id] === 'P') present++;
+    else if (!rp && dateRec[s.id] === 'A') absent++;
+  });
+
+  const pct = total > 0 && (present + absent) > 0
+    ? Math.round(present / (present + absent) * 100) + '%' : '—';
+
+  document.getElementById('stat-total').textContent   = total;
+  document.getElementById('stat-present').textContent = present;
+  document.getElementById('stat-absent').textContent  = absent;
+  document.getElementById('stat-pct').textContent     = pct;
+}
+
+function renderAbsentChips(filtered, dateRec = {}) {
+  const chips = document.getElementById('absent-chips');
+
+  // Read live DOM state for absent names
+  const absentStudents = filtered.filter(s => {
+    const ra = document.getElementById('ra-' + s.id);
+    if (ra) return ra.checked;
+    return dateRec[s.id] === 'A';
+  });
+
+  document.getElementById('absent-count-label').textContent =
+    absentStudents.length > 0 ? `(${absentStudents.length} absent)` : '';
+
+  if (!absentStudents.length) {
+    chips.innerHTML = '<span class="chip-none">No absences recorded for this date/filter.</span>';
+    return;
+  }
+  chips.innerHTML = absentStudents.map(s =>
+    `<span class="chip"> ${s.name}</span>`
+  ).join('');
+}
+
+/* SUBMIT ATTENDANCE */
+document.getElementById('btn-submit').addEventListener('click', () => {
+  const dateStr  = document.getElementById('att-date').value || todayStr();
+  const filtered = getFiltered();
+  if (!filtered.length) { showToast('No students in selection.','warn'); return; }
+
+  if (!records[dateStr]) records[dateStr] = {};
+  let saved=0;
+  filtered.forEach(s => {
+    const rp = document.getElementById('rp-'+s.id);
+    const ra = document.getElementById('ra-'+s.id);
+    if (rp && rp.checked) { records[dateStr][s.id]='P'; saved++; }
+    else if (ra && ra.checked) { records[dateStr][s.id]='A'; saved++; }
+  });
+
+  saveRecords(records);
+  renderStudentList();
+  renderStatsTab();
+  showToast(` Attendance saved for ${dateStr} (${saved}/${filtered.length} marked).`, 'success');
+});
+
+/* RESET */
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (!confirm('Reset ALL attendance records? This cannot be undone.')) return;
+  records = {};
+  saveRecords(records);
+  renderStudentList();
+  renderStatsTab();
+  showToast('All records cleared.', 'warn');
+});
+
+/* ADD STUDENT */
+document.getElementById('btn-save-student').addEventListener('click', () => {
+  const name  = document.getElementById('new-name').value.trim();
+  const roll  = parseInt(document.getElementById('new-roll').value);
+  const div   = document.getElementById('new-div').value;
+  const batch = parseInt(document.getElementById('new-batch').value);
+
+  if (!name) { showToast('Please enter a name.', 'error'); return; }
+  if (!roll || isNaN(roll)) { showToast('Please enter a valid roll number.', 'error'); return; }
+  if (students.find(s=>s.roll===roll)) { showToast('Roll number already exists!', 'error'); return; }
+
+  const id = 's' + roll + '_' + Date.now();
+  students.push({id, name, roll, div, batch});
+  saveStudents(students);
+
+  document.getElementById('new-name').value = '';
+  document.getElementById('new-roll').value = '';
+
+  // Close modal by navigating away from #add-modal
+  window.location.hash = '#';
+
+  renderStudentList();
+  renderAllStudents();
+  renderStatsTab();
+  showToast(` ${name} added!`, 'success');
+});
+
+/* STATISTICS TAB */
+function renderStatsTab() {
+  renderWeeklyChart();
+  renderStatsTable();
+  }
+
+function renderWeeklyChart() {
+  const chart = document.getElementById('weekly-chart');
+  const weekDays = [];
+  for (let i=6; i>=0; i--) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    weekDays.push(d.toISOString().slice(0,10));
+  }
+
+  chart.innerHTML = weekDays.map((dateStr, idx) => {
+    const dayRec = records[dateStr] || {};
+    const all = Object.keys(dayRec);
+    if (!all.length) {
+      return `<div class="bar-row">
+        <div class="bar-day">${DAYS[idx] || new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'})}</div>
+        <div class="bar-track"><div class="bar-fill" style="--pct:0%;"></div></div>
+        <div class="bar-pct" style="color:var(--text-muted)">—</div>
+      </div>`;
+    }
+    const pCount = all.filter(id => dayRec[id]==='P').length;
+    const pct    = all.length > 0 ? Math.round(pCount/all.length*100) : 0;
+    return `<div class="bar-row">
+      <div class="bar-day">${DAYS[idx] || new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'})}</div>
+      <div class="bar-track"><div class="bar-fill" style="--pct:${pct}%;"></div></div>
+      <div class="bar-pct">${pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+function renderStatsTable() {
+  const tbody   = document.getElementById('stats-tbody');
+  const noLow   = document.getElementById('no-low-att');
+
+  // Only students with attendance below 75% (or no data yet skipped)
+  const lowStudents = students.map(s => {
+    let total = 0, present = 0;
+    Object.values(records).forEach(r => {
+      if (s.id in r) { total++; if (r[s.id] === 'P') present++; }
+    });
+    const pct = total > 0 ? Math.round(present / total * 100) : null;
+    return { ...s, total, present, pct };
+  }).filter(s => s.pct !== null && s.pct < 75)
+    .sort((a, b) => a.pct - b.pct); // worst first
+
+  if (!lowStudents.length) {
+    tbody.innerHTML = '';
+    noLow.style.display = 'block';
+    return;
+  }
+  noLow.style.display = 'none';
+
+  tbody.innerHTML = lowStudents.map(s => {
+    const cl = pctClass(s.pct);
+    const warn = s.pct < 50 ? '' : '';
+    return `<tr>
+      <td>${s.roll}</td>
+      <td><b>${warn} ${s.name}</b></td>
+      <td><span class="div-badge div-${s.div}">${s.div}</span></td>
+      <td>${s.batch}</td>
+      <td><span class="badge-p">${s.present}</span></td>
+      <td><span class="badge-a">${s.total - s.present}</span></td>
+      <td><b style="color:var(--absent);">${s.pct}%</b></td>
+      <td style="min-width:100px;">
+        <div class="pbar-wrap"><div class="pbar-fill ${cl}" style="--pct:${s.pct}%;"></div></div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+
+/* FILTER / DATE CHANGE LISTENERS */
+document.getElementById('filter-div').addEventListener('change', renderStudentList);
+document.getElementById('filter-batch').addEventListener('change', renderStudentList);
+document.getElementById('att-date').addEventListener('change', renderStudentList);
+
+/* Tab change triggers re-renders */
+document.getElementById('tab-statistics').addEventListener('change', renderStatsTab);
+document.getElementById('tab-attendance').addEventListener('change', renderStudentList);
+
+/* INIT */
+(function init() {
+  document.getElementById('att-date').value = todayStr();
+  renderStudentList();
+  renderStatsTab();
+})();
+</script>
+</body>
+</html>
